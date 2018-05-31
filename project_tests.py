@@ -98,13 +98,14 @@ def test_optimize(optimize):
     layers_output = tf.Variable(tf.zeros(shape))
     correct_label = tf.placeholder(tf.float32, [None, None, None, num_classes])
     learning_rate = tf.placeholder(tf.float32)
-    logits, train_op, cross_entropy_loss = optimize(layers_output, correct_label, learning_rate, num_classes)
+    adam_epsilon = tf.placeholder(tf.float32)
+    logits, train_op, cross_entropy_loss = optimize(layers_output, correct_label, learning_rate, num_classes, adam_epsilon )
 
     _assert_tensor_shape(logits, [2*3*4, num_classes], 'Logits')
 
     with tf.Session() as sess:
         sess.run(tf.global_variables_initializer())
-        sess.run([train_op], {correct_label: np.arange(np.prod(shape)).reshape(shape), learning_rate: 10})
+        sess.run([train_op], {correct_label: np.arange(np.prod(shape)).reshape(shape), learning_rate: 10, adam_epsilon:1})
         test, loss = sess.run([layers_output, cross_entropy_loss], {correct_label: np.arange(np.prod(shape)).reshape(shape)})
 
     assert test.min() != 0 or test.max() != 0, 'Training operation not changing weights.'
@@ -125,6 +126,7 @@ def test_train_nn(train_nn):
     correct_label = tf.placeholder(tf.float32, name='correct_label')
     keep_prob = tf.placeholder(tf.float32, name='keep_prob')
     learning_rate = tf.placeholder(tf.float32, name='learning_rate')
+    adam_epsilon =  tf.placeholder(tf.float32, name='learning_rate')
     with tf.Session() as sess:
         parameters = {
             'sess': sess,
@@ -136,7 +138,8 @@ def test_train_nn(train_nn):
             'input_image': input_image,
             'correct_label': correct_label,
             'keep_prob': keep_prob,
-            'learning_rate': learning_rate}
+            'learning_rate': learning_rate,
+            'adam_epsilon': adam_epsilon }
         _prevent_print(train_nn, parameters)
 
 

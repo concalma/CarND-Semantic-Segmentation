@@ -103,11 +103,12 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     out_layer = tf.layers.conv2d_transpose(layer3dec_output, num_classes, 16, strides= (8, 8), padding= 'same', 
                                                kernel_initializer= tf.random_normal_initializer(stddev=0.02), 
                                                kernel_regularizer= tf.contrib.layers.l2_regularizer(1e-3))
+
     return out_layer
 tests.test_layers(layers)
 
 
-def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
+def optimize(nn_last_layer, correct_label, learning_rate, num_classes, adam_epsilon ):
     """
     Build the TensorFLow loss and optimizer operations.
     :param nn_last_layer: TF Tensor of the last layer in the neural network
@@ -120,14 +121,14 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes):
 
     
     # reshape the output and the ground truth labels
-    logits = tf.reshape( nn_last_layer, (-1, num_classes) )
+    logits = tf.reshape( nn_last_layer, (-1, num_classes), name="logits" )
     correct_label = tf.reshape( correct_label, (-1, num_classes) )
     
     # our loss function. cel = cross entropy loss
     cel = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=correct_label))
     
     # choose optimizer
-    optimizer = tf.train.AdamOptimizer( learning_rate = learning_rate )
+    optimizer = tf.train.AdamOptimizer( learning_rate = learning_rate, epsilon = adam_epsilon )
     train_op = optimizer.minimize( cel )
 
     return logits, train_op, cel
@@ -136,7 +137,7 @@ tests.test_optimize(optimize)
 
 
 def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
-             correct_label, keep_prob, learning_rate):
+             correct_label, keep_prob, learning_rate, adam_epsilon ):
     """
     Train neural network and print out the loss during training.
     :param sess: TF Session
@@ -157,19 +158,34 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
     for i in range(epochs):
         print("epoch {0}".format(i))
         for img, lab in get_batches_fn(batch_size):
-            tmp, loss = sess.run( [train_op, cross_entropy_loss], feed_dict={input_image: img, correct_label: lab, keep_prob: 0.5, learning_rate: 0.0004})
+            tmp, loss = sess.run( [train_op, cross_entropy_loss], feed_dict={input_image: img, correct_label: lab, keep_prob: 0.5, learning_rate: 0.000004, adam_epsilon: 0.1})
             print("loss {:.4f}".format(loss))
+        
     
 
 tests.test_train_nn(train_nn)
 
+image_shape = (160, 576)
+data_dir = './data'
+runs_dir = './runs'
 
-def run():
+def infer(dataset='kitty'):
+    with tf.Session() as sess:
+        new_saver = tf.train.import_meta_graph('saved_models/vgg-model.meta')
+        new_saver.restore(sess, tf.train.latest_checkpoint('saved_models'))
+        
+        graph = tf.get_default_graph()
+        in_img = graph.get_tensor_by_name( 'image_input:0' )
+        keep_prob = graph.get_tensor_by_name( 'keep_prob:0' )
+        logits = graph.get_tensor_by_name( 'logits:0' )
+        
+        data_dir = 'data/lyft' if dataset=='lyft' else 'data/data_road'
+        helper.save_inference_samples(dataset, runs_dir, data_dir, sess, image_shape, logits, keep_prob, in_img)
+
+
+def train(dataset='kitty'):
     num_classes = 2
-    image_shape = (160, 576)
-    data_dir = './data'
-    runs_dir = './runs'
-    tests.test_for_kitti_dataset(data_dir)
+    #tests.test_for_kitti_dataset(data_dir)
 
     # Download pretrained vgg model
     helper.maybe_download_pretrained_vgg(data_dir)
@@ -181,17 +197,22 @@ def run():
     with tf.Session() as sess:
         # Path to vgg model
         vgg_path = os.path.join(data_dir, 'vgg')
-        # Create function to get batches
-        get_batches_fn = helper.gen_batch_function(os.path.join(data_dir, 'data_road/training'), image_shape)
+        # Create function to get batches        
+        if dataset=='lyft':
+            get_batches_fn = helper.gen_batch_function_lyft('data/lyft', image_shape)
+        else:
+            get_batches_fn = helper.gen_batch_function('data/data_road/training', image_shape)
+            
 
         # OPTIONAL: Augment Images for better results
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
 
         # TODO: Build NN using load_vgg, layers, and optimize function
-        epochs, batch_size = (5, 5)
+        epochs, batch_size = (10, 5)
 
         correct_label = tf.placeholder( tf.int32, [None, None, None, num_classes], name='correct_label')
         learning_rate = tf.placeholder( tf.float32, name='learning_rate')
+        adam_epsilon  = tf.placeholder( tf.float32, name='adam_epsilon')
 
         #load vgg
         in_img, keep_prob, vgg_l3_out, vgg_l4_out, vgg_l7_out = load_vgg( sess, vgg_path )
@@ -200,17 +221,31 @@ def run():
         nn_last_layer = layers( vgg_l3_out, vgg_l4_out, vgg_l7_out, num_classes )
 
         # and optimize tensorflow
-        logits, train_op, cel = optimize( nn_last_layer, correct_label, learning_rate, num_classes )
+        logits, train_op, cel = optimize( nn_last_layer, correct_label, learning_rate, num_classes, adam_epsilon )
 
         # TODO: Train NN using the train_nn function
-        train_nn( sess, epochs, batch_size, get_batches_fn, train_op, cel, in_img, correct_label, keep_prob, learning_rate )
+        train_nn( sess, epochs, batch_size, get_batches_fn, train_op, cel, in_img, correct_label, keep_prob, learning_rate, adam_epsilon )
+
+
+        # save model
+        saver = tf.train.Saver()
+        saver.save(sess, './saved_models/vgg-model')
 
 
         # TODO: Save inference data using helper.save_inference_samples
-        helper.save_inference_samples(runs_dir, data_dir, sess, image_shape, logits, keep_prob, in_img)
+        #data_dir = 'data/lyft' if dataset=='lyft' else 'data/data_road'
+        #helper.save_inference_samples(dataset, runs_dir, data_dir, sess, image_shape, logits, keep_prob, in_img)
 
         # OPTIONAL: Apply the trained model to a video
 
 
 if __name__ == '__main__':
-    run()
+    dataset = 'lyft'
+    train(dataset)
+    infer(dataset)
+    
+    #f = helper.gen_batch_function_lyft('./data/lyft', image_shape)(5)
+    #for a,b in f:
+    #    continue
+    
+    
