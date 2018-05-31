@@ -109,8 +109,6 @@ def gen_batch_function_lyft(data_folder, image_shape):
                 gt_image_file = "{}/{}/{}.png".format(data_folder, gt_path, idx)
                 image_file    = "{}/{}/{}.png".format(data_folder, training_path, idx)
 
-                print('{} '.format(idx), end='')
-
                 image = scipy.misc.imresize(scipy.misc.imread(image_file), image_shape )
                 
                 gt_image_orig = scipy.misc.imread(gt_image_file)
