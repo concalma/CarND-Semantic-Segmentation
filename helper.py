@@ -118,6 +118,7 @@ def gen_batch_function_lyft(data_folder, image_shape):
 
                 roadsgt = gt_image == 7
                 carsgt = gt_image == 10
+                backgt = np.logical_not(carsgt, roadsgt)
                 
                 #scipy.misc.imsave( './seg.png', np.where(roadsgt==True, np.full(image_shape, 250), np.full(image_shape, 0) ))
                 if False:
@@ -127,8 +128,9 @@ def gen_batch_function_lyft(data_folder, image_shape):
                 
                 roadsgt__= roadsgt.reshape(*roadsgt.shape, 1)
                 carsgt__ = carsgt.reshape(*carsgt.shape, 1)
+                backgt__ = backgt.reshape(*backgt.shape, 1)
                 
-                gt_image = np.concatenate((roadsgt__, carsgt__) , axis=2)
+                gt_image = np.concatenate((roadsgt__, carsgt__, backgt__) , axis=2)
 
                 images.append(image)
                 gt_images.append(gt_image)
@@ -196,20 +198,20 @@ def gen_test_output_lyft(sess, logits, keep_prob, image_pl, data_folder, image_s
             [tf.nn.softmax(logits)],
             {keep_prob: 1.0, image_pl: [image]})
         
-        road_softmax = im_softmax[0][:, 0].reshape(image_shape[0], image_shape[1])
-        cars_softmax = im_softmax[0][:, 1].reshape(image_shape[0], image_shape[1])
-        
-        segmentation = (cars_softmax > 0.5).reshape(image_shape[0], image_shape[1], 1)
-        maskcars = np.dot(segmentation, np.array([[0, 255, 0, 127]]))
-        maskcars = scipy.misc.toimage(maskcars, mode="RGBA")
-        
-        segmentation = (road_softmax > 0.5).reshape(image_shape[0], image_shape[1], 1)
-        maskroad = np.dot(segmentation, np.array([[255, 0, 0, 127]]))
-        maskroad = scipy.misc.toimage(maskroad, mode="RGBA")
+        def paste_mask(class_number, im_softmax, color, image):
+            sm = im_softmax[0][:, class_number].reshape(image_shape[0], image_shape[1])
+            segmentation = (sm > 0.5).reshape(image_shape[0], image_shape[1], 1)
+            mask = np.dot(segmentation, np.array([color]))
+            mask = scipy.misc.toimage(mask, mode="RGBA")
+            
+            image.paste(mask, box=None, mask=mask)
         
         street_im = scipy.misc.toimage(image)
-        street_im.paste(maskcars, box=None, mask=maskcars)
-        street_im.paste(maskroad, box=None, mask=maskroad)
+        paste_mask(0, im_softmax, [0,255,0,127], street_im)
+        paste_mask(1, im_softmax, [255,0,0,127], street_im)
+        paste_mask(2, im_softmax, [0,0,255,127], street_im)
+        
+        
         
 
         yield os.path.basename(image_file), np.array(street_im)
