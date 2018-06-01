@@ -76,7 +76,7 @@ def preprocess_labels_lyft(label_image):
     # Return the preprocessed label image 
     return labels_new
 
-def gen_batch_function_lyft(data_folder, image_shape):
+def gen_batch_function_lyft(data_folder, image_shape, overfit=False):
     """
     Generate function to create batches of training data
     :param data_folder: Path to folder that contains all the datasets
@@ -90,12 +90,10 @@ def gen_batch_function_lyft(data_folder, image_shape):
         :return: Batches of training data
         """
         
-        short = False
+        training_path = 'CameraRGB' if not overfit else 'CameraRGB_short'
+        gt_path = 'CameraSeg' if not overfit else 'CameraSeg_short'
         
-        training_path = 'CameraRGB' if not short else 'CameraRGB_short'
-        gt_path = 'CameraSeg' if not short else 'CameraSeg_short'
-        
-        imcount = 1000 if not short else 10
+        imcount = 1000 if not overfit else 10
         
         imidxs = [i for i in range(imcount)]
         
@@ -112,23 +110,26 @@ def gen_batch_function_lyft(data_folder, image_shape):
                 image = scipy.misc.imresize(scipy.misc.imread(image_file), image_shape )
                 
                 gt_image_orig = scipy.misc.imread(gt_image_file)
-                gt_image = scipy.misc.imresize( preprocess_labels_lyft(gt_image_orig) , image_shape, interp='nearest')
+                gt_image = scipy.misc.imresize( preprocess_labels_lyft(gt_image_orig) , image_shape, interp='nearest' )
 
                 roadsgt = gt_image == 7
                 carsgt = gt_image == 10
-                backgt = np.logical_not(carsgt, roadsgt)
+                backgt = np.logical_not(np.logical_or(carsgt, roadsgt))
                 
                 #scipy.misc.imsave( './seg.png', np.where(roadsgt==True, np.full(image_shape, 250), np.full(image_shape, 0) ))
                 if False:
-                    scipy.misc.imsave( './orig.png', image)
-                    scipy.misc.imsave( './seg0.png', gt_image)
-                    scipy.misc.imsave( './seg.png', roadsgt )
+                    scipy.misc.imsave( './orig0.png', image)
+                    scipy.misc.imsave( './road0.png', roadsgt)
+                    scipy.misc.imsave( './car0.png', carsgt )
+                    scipy.misc.imsave( './back0.png', backgt )
                 
-                roadsgt__= roadsgt.reshape(*roadsgt.shape, 1)
-                carsgt__ = carsgt.reshape(*carsgt.shape, 1)
-                backgt__ = backgt.reshape(*backgt.shape, 1)
+                #roadsgt__= roadsgt.reshape(*roadsgt.shape, 1)
+                #carsgt__ = carsgt.reshape(*carsgt.shape, 1)
+                #backgt__ = backgt.reshape(*backgt.shape, 1)
                 
-                gt_image = np.concatenate((roadsgt__, carsgt__, backgt__) , axis=2)
+                #gt_image = np.concatenate((roadsgt__, carsgt__, backgt__) , axis=2)
+
+                gt_image = np.dstack((roadsgt, carsgt, backgt))
 
                 images.append(image)
                 gt_images.append(gt_image)
@@ -136,7 +137,7 @@ def gen_batch_function_lyft(data_folder, image_shape):
             yield np.array(images), np.array(gt_images)
     return get_batches_fn
 
-def gen_batch_function(data_folder, image_shape):
+def gen_batch_function(data_folder, image_shape, overfit=False):
     """
     Generate function to create batches of training data
     :param data_folder: Path to folder that contains all the datasets
@@ -177,7 +178,7 @@ def gen_batch_function(data_folder, image_shape):
     return get_batches_fn
 
 
-def gen_test_output_lyft(sess, logits, keep_prob, image_pl, data_folder, image_shape):
+def gen_test_output_lyft(sess, logits, keep_prob, image_pl, data_folder, image_shape, overfit=False):
     """
     Generate test output using the test images
     :param sess: TF session
@@ -189,7 +190,8 @@ def gen_test_output_lyft(sess, logits, keep_prob, image_pl, data_folder, image_s
     :return: Output for for each test image
     """
     
-    for image_file in glob(os.path.join(data_folder, 'CameraRGB', '*.png')):
+    dir = 'CameraRGB' if not overfit else 'CameraRGB_short'
+    for image_file in glob(os.path.join(data_folder, dir, '*.png')):
         image = scipy.misc.imresize(scipy.misc.imread(image_file), image_shape)
 
         im_softmax = sess.run(
@@ -241,7 +243,7 @@ def gen_test_output(sess, logits, keep_prob, image_pl, data_folder, image_shape)
 
         yield os.path.basename(image_file), np.array(street_im)
 
-def save_inference_samples(dataset, runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image):
+def save_inference_samples(dataset, runs_dir, data_dir, sess, image_shape, logits, keep_prob, input_image, overfit=False):
     # Make folder for current run
     output_dir = os.path.join(runs_dir, str(time.time()))
     if os.path.exists(output_dir):
@@ -255,7 +257,7 @@ def save_inference_samples(dataset, runs_dir, data_dir, sess, image_shape, logit
     if dataset=='kitty':
         image_outputs = gen_test_output( sess, logits, keep_prob, input_image, data_dir, image_shape)
     else:
-        image_outputs = gen_test_output_lyft( sess, logits, keep_prob, input_image, data_dir, image_shape)
+        image_outputs = gen_test_output_lyft( sess, logits, keep_prob, input_image, data_dir, image_shape, overfit)
         
     for name, image in image_outputs:
         scipy.misc.imsave(os.path.join(output_dir, name), image)

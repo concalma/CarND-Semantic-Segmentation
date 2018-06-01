@@ -47,7 +47,7 @@ def load_vgg(sess, vgg_path):
     return image_input, keep_prob, layer3_out, layer4_out, layer7_out
     
 # loading VGG
-tests.test_load_vgg(load_vgg, tf)
+#tests.test_load_vgg(load_vgg, tf)
 
 
 def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
@@ -105,7 +105,7 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
                                                kernel_regularizer= tf.contrib.layers.l2_regularizer(1e-3))
 
     return out_layer
-tests.test_layers(layers)
+#tests.test_layers(layers)
 
 
 def optimize(nn_last_layer, correct_label, learning_rate, num_classes, adam_epsilon ):
@@ -133,7 +133,7 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes, adam_epsi
 
     return logits, train_op, cel
 
-tests.test_optimize(optimize)
+#tests.test_optimize(optimize)
 
 
 def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_loss, input_image,
@@ -159,20 +159,20 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
         print("epoch {0}".format(i))
         c = 0
         for img, lab in get_batches_fn(batch_size):
-            tmp, loss = sess.run( [train_op, cross_entropy_loss], feed_dict={input_image: img, correct_label: lab, keep_prob: 0.5, learning_rate: 0.000004, adam_epsilon: 0.1})
+            tmp, loss = sess.run( [train_op, cross_entropy_loss], feed_dict={input_image: img, correct_label: lab, keep_prob: 0.5, learning_rate: 0.004, adam_epsilon: 0.1})
             print("{}:{}: loss {:.4f}".format(i, c, loss))
             c += 1
         
         
     
 
-tests.test_train_nn(train_nn)
+#tests.test_train_nn(train_nn)
 
 image_shape = (160, 576)
 data_dir = './data'
 runs_dir = './runs'
 
-def infer(dataset='kitty'):
+def infer(dataset='kitty', overfit=False):
     with tf.Session() as sess:
         new_saver = tf.train.import_meta_graph('saved_models/vgg-model.meta')
         new_saver.restore(sess, tf.train.latest_checkpoint('saved_models'))
@@ -183,10 +183,10 @@ def infer(dataset='kitty'):
         logits = graph.get_tensor_by_name( 'logits:0' )
         
         data_dir = 'data/lyft' if dataset=='lyft' else 'data/data_road'
-        helper.save_inference_samples(dataset, runs_dir, data_dir, sess, image_shape, logits, keep_prob, in_img)
+        helper.save_inference_samples(dataset, runs_dir, data_dir, sess, image_shape, logits, keep_prob, in_img, overfit)
 
 
-def train(dataset='kitty'):
+def train(dataset='kitty', overfit=False):
     num_classes = 2 if dataset=='kitty' else 3
     #tests.test_for_kitti_dataset(data_dir)
 
@@ -202,16 +202,16 @@ def train(dataset='kitty'):
         vgg_path = os.path.join(data_dir, 'vgg')
         # Create function to get batches        
         if dataset=='lyft':
-            get_batches_fn = helper.gen_batch_function_lyft('data/lyft', image_shape)
+            get_batches_fn = helper.gen_batch_function_lyft('data/lyft', image_shape, overfit )
         else:
-            get_batches_fn = helper.gen_batch_function('data/data_road/training', image_shape)
+            get_batches_fn = helper.gen_batch_function('data/data_road/training', image_shape, overfit )
             
 
         # OPTIONAL: Augment Images for better results
         #  https://datascience.stackexchange.com/questions/5224/how-to-prepare-augment-images-for-neural-network
 
         # TODO: Build NN using load_vgg, layers, and optimize function
-        epochs, batch_size = (5, 5)
+        epochs, batch_size = (3, 1)
 
         correct_label = tf.placeholder( tf.int32, [None, None, None, num_classes], name='correct_label')
         learning_rate = tf.placeholder( tf.float32, name='learning_rate')
@@ -244,8 +244,9 @@ def train(dataset='kitty'):
 
 if __name__ == '__main__':
     dataset = 'lyft'
-    train(dataset)
-    infer(dataset)
+    overfit = True
+    train(dataset, overfit)
+    infer(dataset, overfit)
     
     #f = helper.gen_batch_function_lyft('./data/lyft', image_shape)(5)
     #for a,b in f:
