@@ -108,15 +108,15 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
 #tests.test_layers(layers)
 
 def lyft_score(y_true, y_pred, image_shape ):
-    true = tf.reshape(y_true, [-1, image_shape[0]* image_shape[1],3])
-    truef = tf.cast(true, dtype=tf.float32)
-    pred = tf.reshape(y_pred, [-1, image_shape[0]* image_shape[1],3])
+    #true = tf.reshape(y_true, [-1, image_shape[0]* image_shape[1],3])
+    truef = tf.cast(y_true, dtype=tf.float32)
+    pred = y_pred; #tf.reshape(y_pred, [-1, image_shape[0]* image_shape[1],3])
     
 
     inte = tf.multiply(truef, pred)
-    true_sum = tf.reduce_sum(truef,axis=1)
-    pred_sum = tf.reduce_sum(pred,axis=1)
-    inte_sum = tf.reduce_sum(inte,axis=1)
+    true_sum = tf.reduce_sum(truef,axis=0)
+    pred_sum = tf.reduce_sum(pred,axis=0)
+    inte_sum = tf.reduce_sum(inte,axis=0)
 
     precision = tf.divide( inte_sum, tf.add(pred_sum, 1))
     recall = tf.divide(inte_sum, tf.add(true_sum ,1))
@@ -132,7 +132,8 @@ def lyft_score(y_true, y_pred, image_shape ):
 
     avg_weights = tf.constant([0.5, 0.5, 0.0])
 
-    favg = tf.reduce_sum(tf.multiply(avg_weights, fscore), axis=1)
+    favg = tf.reduce_sum(tf.multiply(avg_weights, fscore), axis=0)
+    
     return favg
 
 def lyft_score_loss(y_true, y_pred, image_shape ):
@@ -190,9 +191,11 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
         print("epoch {0}".format(i))
         c = 0
         for img, lab in get_batches_fn(batch_size):
+           # writer = tf.summary.FileWriter('logs', sess.graph)
             tmp, loss = sess.run( [train_op, cross_entropy_loss], feed_dict={input_image: img, correct_label: lab, keep_prob: 0.5, learning_rate: 0.004, adam_epsilon: 0.1})
             print("{}:{}: loss {:.4f}".format(i, c, loss))
             c += 1
+            #writer.close()
         
         
     
