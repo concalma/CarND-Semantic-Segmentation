@@ -107,8 +107,38 @@ def layers(vgg_layer3_out, vgg_layer4_out, vgg_layer7_out, num_classes):
     return out_layer
 #tests.test_layers(layers)
 
+def lyft_score(y_true, y_pred, image_shape ):
+    true = tf.reshape(y_true, [-1, image_shape[0]* image_shape[1],3])
+    truef = tf.cast(true, dtype=tf.float32)
+    pred = tf.reshape(y_pred, [-1, image_shape[0]* image_shape[1],3])
+    
 
-def optimize(nn_last_layer, correct_label, learning_rate, num_classes, adam_epsilon ):
+    inte = tf.multiply(truef, pred)
+    true_sum = tf.reduce_sum(truef,axis=1)
+    pred_sum = tf.reduce_sum(pred,axis=1)
+    inte_sum = tf.reduce_sum(inte,axis=1)
+
+    precision = tf.divide( inte_sum, tf.add(pred_sum, 1))
+    recall = tf.divide(inte_sum, tf.add(true_sum ,1))
+
+    beta2_r = 0.5**2   #road 
+    beta2_v = 2.0**2   #vehicle
+    beta2 = tf.constant([beta2_r, beta2_v, 1.0])
+
+    fscore_num = tf.multiply(tf.add(1.0, beta2), tf.multiply(precision, recall))
+    fscore_den = tf.multiply(beta2, tf.add(precision, tf.add(recall, 1e-6)))
+
+    fscore = tf.divide(fscore_num, fscore_den)
+
+    avg_weights = tf.constant([0.5, 0.5, 0.0])
+
+    favg = tf.reduce_sum(tf.multiply(avg_weights, fscore), axis=1)
+    return favg
+
+def lyft_score_loss(y_true, y_pred, image_shape ):
+    return tf.subtract(1.0, lyft_score(y_true, y_pred, image_shape))
+
+def optimize(nn_last_layer, correct_label, learning_rate, num_classes, adam_epsilon, image_shape ):
     """
     Build the TensorFLow loss and optimizer operations.
     :param nn_last_layer: TF Tensor of the last layer in the neural network
@@ -125,7 +155,8 @@ def optimize(nn_last_layer, correct_label, learning_rate, num_classes, adam_epsi
     correct_label = tf.reshape( correct_label, (-1, num_classes) )
     
     # our loss function. cel = cross entropy loss
-    cel = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=correct_label))
+    #cel = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits(logits=logits, labels=correct_label))
+    cel = tf.reduce_mean(lyft_score_loss( correct_label, logits, image_shape ))
     
     # choose optimizer
     optimizer = tf.train.AdamOptimizer( learning_rate = learning_rate, epsilon = adam_epsilon )
@@ -168,7 +199,7 @@ def train_nn(sess, epochs, batch_size, get_batches_fn, train_op, cross_entropy_l
 
 #tests.test_train_nn(train_nn)
 
-image_shape = (512, 512)
+image_shape = (128, 128)
 data_dir = './data'
 runs_dir = './runs'
 
@@ -224,7 +255,7 @@ def train(dataset='kitty', overfit=False):
         nn_last_layer = layers( vgg_l3_out, vgg_l4_out, vgg_l7_out, num_classes )
 
         # and optimize tensorflow
-        logits, train_op, cel = optimize( nn_last_layer, correct_label, learning_rate, num_classes, adam_epsilon )
+        logits, train_op, cel = optimize( nn_last_layer, correct_label, learning_rate, num_classes, adam_epsilon, image_shape )
 
         # TODO: Train NN using the train_nn function
         train_nn( sess, epochs, batch_size, get_batches_fn, train_op, cel, in_img, correct_label, keep_prob, learning_rate, adam_epsilon )
