@@ -90,10 +90,11 @@ def gen_batch_function_lyft(data_folder, image_shape, overfit=False):
         :return: Batches of training data
         """
         
-        training_path = 'CameraRGB' if not overfit else 'CameraRGB_short'
-        gt_path = 'CameraSeg' if not overfit else 'CameraSeg_short'
+        train_files = glob(os.path.join(data_folder,'**/CameraRGB/*.png'), recursive=True)
         
-        imcount = 1000 if not overfit else 10
+        
+        imcount = len(train_files)
+        print("training on {} files under {}".format(imcount, data_folder)  )
         
         imidxs = [i for i in range(imcount)]
         
@@ -104,8 +105,8 @@ def gen_batch_function_lyft(data_folder, image_shape, overfit=False):
 
             
             for idx in imidxs[batch_i:batch_i+batch_size]:
-                gt_image_file = "{}/{}/{}.png".format(data_folder, gt_path, idx)
-                image_file    = "{}/{}/{}.png".format(data_folder, training_path, idx)
+                image_file    = train_files[idx] 
+                gt_image_file =  image_file.replace('RGB', 'Seg')
 
                 image = scipy.misc.imresize(scipy.misc.imread(image_file), image_shape )
                 
